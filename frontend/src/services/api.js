@@ -1,7 +1,5 @@
 import axios from 'axios'
 
-const API_URL = ''
-
 const api = axios.create({
   baseURL: `/api/v1`,
   headers: { 'Content-Type': 'application/json' }
@@ -48,16 +46,59 @@ export const userService = {
     const { data } = await api.get('/users')
     return data
   },
+  createUser: async (userData) => {
+    const { data } = await api.post('/users', userData)
+    return data
+  },
+  updateUser: async (userId, userData) => {
+    const { data } = await api.put(`/users/${userId}`, userData)
+    return data
+  },
+  toggleUser: async (userId) => {
+    const { data } = await api.patch(`/users/${userId}/toggle`)
+    return data
+  },
   deleteUser: async (userId) => {
     await api.delete(`/users/${userId}`)
   },
 }
 
+// ---- Cursos ----
+export const courseService = {
+  listCourses: async () => {
+    const { data } = await api.get('/courses')
+    return data
+  },
+  createCourse: async (courseData) => {
+    const { data } = await api.post('/courses', courseData)
+    return data
+  },
+  updateCourse: async (courseId, courseData) => {
+    const { data } = await api.put(`/courses/${courseId}`, courseData)
+    return data
+  },
+  getCourseStudents: async (courseId) => {
+    const { data } = await api.get(`/courses/${courseId}/students`)
+    return data
+  },
+  enrollStudent: async (courseId, studentId) => {
+    const { data } = await api.post(`/courses/${courseId}/enroll`, { student_id: studentId })
+    return data
+  },
+  unenrollStudent: async (courseId, studentId) => {
+    const { data } = await api.delete(`/courses/${courseId}/enroll/${studentId}`)
+    return data
+  },
+}
+
 // ---- Asistencia ----
 export const attendanceService = {
-  // Original (crear sesión por código)
   createSession: async (sessionData) => {
     const { data } = await api.post('/attendance/sessions', sessionData)
+    return data
+  },
+  listSessions: async (courseId) => {
+    const { data } = await api.get(`/attendance/sessions?course_id=${courseId}`)
     return data
   },
   markAttendance: async (sessionCode, studentCode) => {
@@ -72,13 +113,16 @@ export const attendanceService = {
     const { data } = await api.patch(`/attendance/sessions/${sessionId}/close`)
     return data
   },
-  // Electiva 5 simplificada
   getElectiva5: async () => {
     const { data } = await api.get('/attendance/electiva5')
     return data
   },
   markElectiva5: async (studentId, status) => {
     const { data } = await api.post('/attendance/electiva5/mark', { student_id: studentId, status })
+    return data
+  },
+  createElectiva5Session: async () => {
+    const { data } = await api.post('/attendance/electiva5/session')
     return data
   },
 }

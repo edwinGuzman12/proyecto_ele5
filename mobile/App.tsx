@@ -6,17 +6,17 @@ import AttendanceScreen from './screens/AttendanceScreen';
 export default function App() {
   const [user, setUser] = useState<any>(null);
 
-  const handleLoginSuccess = (profile: any) => {
-    setUser(profile);
-  };
-
   return (
     <>
-      <StatusBar style="auto" />
+      <StatusBar style="light" />
       {user ? (
-        <AttendanceScreen studentCode={user.student_code || user.username} />
+        <AttendanceScreen
+          studentCode={user.student_code || user.username}
+          userName={user.username}
+          fullName={user.full_name || user.name || user.nombre}
+        />
       ) : (
-        <LoginScreen onLoginSuccess={handleLoginSuccess} />
+        <LoginScreen onLoginSuccess={setUser} />
       )}
     </>
   );

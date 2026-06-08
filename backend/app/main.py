@@ -3,13 +3,12 @@ Sistema de Toma de Asistencia
 Colegio Mayor del Cauca - Unimayor
 Backend: FastAPI + PostgreSQL
 """
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.core.database import engine, Base
-from app.routers import auth, attendance, reports, users, dashboard
+from app.routers import auth, attendance, reports, users, dashboard, courses
 
 # Crear tablas al iniciar (en producción usar Alembic)
 Base.metadata.create_all(bind=engine)
@@ -37,7 +36,7 @@ app.include_router(attendance.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(users.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
-
+app.include_router(courses.router, prefix="/api/v1")
 
 @app.get("/", tags=["Root"])
 def root():
@@ -47,7 +46,6 @@ def root():
         "institution": "Colegio Mayor del Cauca - Unimayor",
         "docs": "/docs"
     }
-
 
 @app.get("/health", tags=["Health"])
 def health_check():

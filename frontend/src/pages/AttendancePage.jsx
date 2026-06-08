@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { attendanceService } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
-import { CheckCircle, XCircle, ClipboardCheck, RefreshCw, CalendarDays } from 'lucide-react'
+import { CheckCircle, XCircle, ClipboardCheck, RefreshCw, CalendarDays, Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -10,7 +10,8 @@ import { es } from 'date-fns/locale'
 function TeacherView() {
   const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
-  const [marking, setMarking] = useState(null) // student_id being updated
+  const [marking, setMarking] = useState(null)
+  const [creating, setCreating] = useState(false)
 
   const load = useCallback(async () => {
     try {
@@ -25,6 +26,19 @@ function TeacherView() {
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  const handleNewSession = async () => {
+    setCreating(true)
+    try {
+      await attendanceService.createElectiva5Session()
+      toast.success('Nueva sesión creada')
+      load()
+    } catch (e) {
+      toast.error(e.response?.data?.detail || 'Error al crear sesión')
+    } finally {
+      setCreating(false)
+    }
+  }
 
   const handleMark = async (studentId, status) => {
     setMarking(studentId)
@@ -74,9 +88,19 @@ function TeacherView() {
               </p>
             )}
           </div>
-          <button onClick={load} className="p-2 text-gray-400 hover:text-unimayor-green-600 transition-colors" title="Recargar">
-            <RefreshCw size={18} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleNewSession}
+              disabled={creating}
+              className="btn-primary flex items-center gap-1.5 text-sm py-1.5 px-3"
+            >
+              <Plus size={16} />
+              {creating ? 'Creando...' : 'Nueva sesión'}
+            </button>
+            <button onClick={load} className="p-2 text-gray-400 hover:text-unimayor-green-600 transition-colors" title="Recargar">
+              <RefreshCw size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Contadores */}
@@ -119,7 +143,6 @@ function TeacherView() {
                   <p className="text-xs text-gray-500">{s.student_code}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* Botón Presente */}
                   <button
                     onClick={() => handleMark(s.student_id, 'presente')}
                     disabled={marking === s.student_id}
@@ -132,7 +155,6 @@ function TeacherView() {
                     <CheckCircle size={14} />
                     Asistió
                   </button>
-                  {/* Botón Ausente */}
                   <button
                     onClick={() => handleMark(s.student_id, 'ausente')}
                     disabled={marking === s.student_id}
@@ -182,7 +204,6 @@ function StudentView() {
 
   return (
     <div className="space-y-4">
-      {/* Resumen */}
       <div className="card">
         <h3 className="font-heading font-bold text-gray-900 text-lg">{course?.name}</h3>
         <p className="text-gray-500 text-sm mt-1">Mi asistencia — {data.student_name}</p>
@@ -213,7 +234,6 @@ function StudentView() {
         </div>
       </div>
 
-      {/* Historial */}
       {sessions?.length > 0 && (
         <div className="card">
           <h3 className="font-heading font-semibold text-gray-800 mb-3">Historial de clases</h3>
