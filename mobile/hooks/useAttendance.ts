@@ -32,7 +32,7 @@ export const useAttendance = () => {
       const token = (await AsyncStorage.getItem('access_token')) || '';
       const userStr = await AsyncStorage.getItem('user');
       const user = userStr ? JSON.parse(userStr) : null;
-      const realStudentCode = user?.id?.toString() || student_code;
+      const realStudentCode = user?.student_code || student_code;
       const response = await marcarAsistencia(session_code, realStudentCode, token);
       setSuccess(response.message || '¡Asistencia registrada exitosamente!');
       await cargarHistorial();
