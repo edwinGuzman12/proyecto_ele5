@@ -4,18 +4,26 @@ import { courseService, userService } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 
-// Modal para crear/editar curso
 function CourseModal({ course, onClose, onSave }) {
   const [form, setForm] = useState({
     name: course?.name || '',
     code: course?.code || '',
-    description: course?.description || '',
+    program: course?.program || '',
+    semester: course?.semester || 1,
+    teacher_id: course?.teacher_id || '',
   })
+  const [teachers, setTeachers] = useState([])
   const [loading, setLoading] = useState(false)
 
+  useEffect(() => {
+    userService.listUsers()
+      .then(users => setTeachers(users.filter(u => u.role === 'docente')))
+      .catch(() => toast.error('Error al cargar docentes'))
+  }, [])
+
   const handleSubmit = async () => {
-    if (!form.name || !form.code) {
-      toast.error('Nombre y código son obligatorios')
+    if (!form.name || !form.code || !form.program || !form.teacher_id) {
+      toast.error('Todos los campos son obligatorios')
       return
     }
     setLoading(true)
@@ -24,7 +32,11 @@ function CourseModal({ course, onClose, onSave }) {
         await courseService.updateCourse(course.id, form)
         toast.success('Materia actualizada')
       } else {
-        await courseService.createCourse(form)
+        await courseService.createCourse({
+          ...form,
+          semester: Number(form.semester),
+          teacher_id: Number(form.teacher_id)
+        })
         toast.success('Materia creada')
       }
       onSave()
@@ -49,31 +61,33 @@ function CourseModal({ course, onClose, onSave }) {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Nombre</label>
-            <input
-              className="input-field"
-              placeholder="Ej: Electiva 5"
-              value={form.name}
-              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-            />
+            <input className="input-field" placeholder="Ej: Electiva 5" value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Código</label>
-            <input
-              className="input-field"
-              placeholder="Ej: ELE5-2026"
-              value={form.code}
-              onChange={e => setForm(f => ({ ...f, code: e.target.value }))}
-            />
+            <input className="input-field" placeholder="Ej: ELE5-2026" value={form.code}
+              onChange={e => setForm(f => ({ ...f, code: e.target.value }))} />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
-            <textarea
-              className="input-field"
-              placeholder="Descripción del curso..."
-              rows={3}
-              value={form.description}
-              onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-            />
+            <label className="block text-sm font-medium text-gray-700 mb-1">Programa</label>
+            <input className="input-field" placeholder="Ej: Ingeniería de Sistemas" value={form.program}
+              onChange={e => setForm(f => ({ ...f, program: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Semestre</label>
+            <input className="input-field" type="number" min={1} max={10} value={form.semester}
+              onChange={e => setForm(f => ({ ...f, semester: e.target.value }))} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Docente</label>
+            <select className="input-field" value={form.teacher_id}
+              onChange={e => setForm(f => ({ ...f, teacher_id: e.target.value }))}>
+              <option value="">Selecciona un docente</option>
+              {teachers.map(t => (
+                <option key={t.id} value={t.id}>{t.full_name}</option>
+              ))}
+            </select>
           </div>
         </div>
         <div className="flex gap-3 mt-6">
@@ -87,7 +101,6 @@ function CourseModal({ course, onClose, onSave }) {
   )
 }
 
-// Panel de estudiantes del curso
 function CourseStudents({ courseId, allStudents }) {
   const [enrolled, setEnrolled] = useState([])
   const [loading, setLoading] = useState(true)
@@ -132,7 +145,6 @@ function CourseStudents({ courseId, allStudents }) {
 
   return (
     <div className="mt-4 space-y-4">
-      {/* Matriculados */}
       <div>
         <p className="text-sm font-medium text-gray-700 mb-2">Estudiantes matriculados ({enrolled.length})</p>
         {enrolled.length === 0 ? (
@@ -145,10 +157,7 @@ function CourseStudents({ courseId, allStudents }) {
                   <p className="text-sm font-medium text-gray-800">{s.full_name}</p>
                   <p className="text-xs text-gray-500">{s.student_code}</p>
                 </div>
-                <button
-                  onClick={() => handleUnenroll(s.id)}
-                  className="text-xs text-red-500 hover:text-red-700 font-medium"
-                >
+                <button onClick={() => handleUnenroll(s.id)} className="text-xs text-red-500 hover:text-red-700 font-medium">
                   Quitar
                 </button>
               </div>
@@ -156,8 +165,6 @@ function CourseStudents({ courseId, allStudents }) {
           </div>
         )}
       </div>
-
-      {/* No matriculados */}
       {notEnrolled.length > 0 && (
         <div>
           <p className="text-sm font-medium text-gray-700 mb-2">Agregar estudiantes</p>
@@ -168,10 +175,7 @@ function CourseStudents({ courseId, allStudents }) {
                   <p className="text-sm font-medium text-gray-800">{s.full_name}</p>
                   <p className="text-xs text-gray-500">{s.student_code}</p>
                 </div>
-                <button
-                  onClick={() => handleEnroll(s.id)}
-                  className="text-xs text-unimayor-green-600 hover:text-unimayor-green-800 font-medium"
-                >
+                <button onClick={() => handleEnroll(s.id)} className="text-xs text-unimayor-green-600 hover:text-unimayor-green-800 font-medium">
                   Matricular
                 </button>
               </div>
@@ -183,7 +187,6 @@ function CourseStudents({ courseId, allStudents }) {
   )
 }
 
-// Tarjeta de curso
 function CourseCard({ course, allStudents, onEdit, isAdmin }) {
   const [expanded, setExpanded] = useState(false)
 
@@ -196,7 +199,8 @@ function CourseCard({ course, allStudents, onEdit, isAdmin }) {
           </div>
           <div>
             <h3 className="font-semibold text-gray-900">{course.name}</h3>
-            <p className="text-xs text-gray-500">{course.code}</p>
+            <p className="text-xs text-gray-500">{course.code} · {course.program} · Semestre {course.semester}</p>
+            <p className="text-xs text-gray-400">Docente: {course.teacher_name}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -205,23 +209,13 @@ function CourseCard({ course, allStudents, onEdit, isAdmin }) {
               <Pencil size={16} />
             </button>
           )}
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="text-gray-400 hover:text-gray-600 flex items-center gap-1 text-sm"
-          >
+          <button onClick={() => setExpanded(!expanded)} className="text-gray-400 hover:text-gray-600 flex items-center gap-1 text-sm">
             <Users size={16} />
             {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </button>
         </div>
       </div>
-
-      {course.description && (
-        <p className="text-sm text-gray-500 mt-2">{course.description}</p>
-      )}
-
-      {expanded && (
-        <CourseStudents courseId={course.id} allStudents={allStudents} />
-      )}
+      {expanded && <CourseStudents courseId={course.id} allStudents={allStudents} />}
     </div>
   )
 }
@@ -271,10 +265,7 @@ export default function CoursesPage() {
           <p className="text-gray-500 text-sm mt-1">Gestión de cursos y asignaciones</p>
         </div>
         {isAdmin && (
-          <button
-            onClick={() => { setEditCourse(null); setShowModal(true) }}
-            className="btn-primary flex items-center gap-2"
-          >
+          <button onClick={() => { setEditCourse(null); setShowModal(true) }} className="btn-primary flex items-center gap-2">
             <Plus size={18} /> Agregar materia
           </button>
         )}
@@ -290,13 +281,7 @@ export default function CoursesPage() {
       ) : (
         <div className="space-y-4">
           {courses.map(course => (
-            <CourseCard
-              key={course.id}
-              course={course}
-              allStudents={students}
-              onEdit={handleEdit}
-              isAdmin={isAdmin}
-            />
+            <CourseCard key={course.id} course={course} allStudents={students} onEdit={handleEdit} isAdmin={isAdmin} />
           ))}
         </div>
       )}
