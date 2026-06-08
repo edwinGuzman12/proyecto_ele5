@@ -114,7 +114,7 @@ claude --agent frontend-agent "Completa la página StudentsPage con tabla y form
 
 ---
 
-## 📁 Estructura del Proyecto
+
 
 ```
 proyecto_ele5/
