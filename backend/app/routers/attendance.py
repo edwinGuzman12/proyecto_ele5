@@ -22,11 +22,18 @@ def generate_session_code(length: int = 6) -> str:
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=length))
 
 
-# ── Endpoints originales ────────────────────────────────────────────────────
+# ── Endpoints originales (ahora con autenticación) ─────────────────────────
 
 @router.post("/sessions", response_model=AttendanceSessionResponse, status_code=201)
-def create_session(data: AttendanceSessionCreate, db: Session = Depends(get_db)):
-    """Docente crea una sesión de clase y obtiene código de asistencia."""
+def create_session(
+    data: AttendanceSessionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Docente/admin crea una sesión de clase."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.DOCENTE]:
+        raise HTTPException(status_code=403, detail="Sin permisos para crear sesiones")
+
     code = generate_session_code()
     while db.query(AttendanceSession).filter(AttendanceSession.session_code == code).first():
         code = generate_session_code()
@@ -43,9 +50,33 @@ def create_session(data: AttendanceSessionCreate, db: Session = Depends(get_db))
     return session
 
 
+@router.get("/sessions", response_model=List[AttendanceSessionResponse])
+def list_sessions(
+    course_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Lista sesiones de un curso."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.DOCENTE]:
+        raise HTTPException(status_code=403, detail="Sin permisos")
+    return (
+        db.query(AttendanceSession)
+        .filter(AttendanceSession.course_id == course_id)
+        .order_by(AttendanceSession.date.desc())
+        .all()
+    )
+
+
 @router.post("/mark", status_code=200)
-def mark_attendance(data: AttendanceMarkByCode, db: Session = Depends(get_db)):
+def mark_attendance(
+    data: AttendanceMarkByCode,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """Estudiante marca asistencia usando el código de sesión."""
+    if current_user.role != UserRole.ESTUDIANTE:
+        raise HTTPException(status_code=403, detail="Solo estudiantes pueden marcar asistencia con código")
+
     session = db.query(AttendanceSession).filter(
         AttendanceSession.session_code == data.session_code,
         AttendanceSession.is_open == True
@@ -56,6 +87,9 @@ def mark_attendance(data: AttendanceMarkByCode, db: Session = Depends(get_db)):
     student = db.query(Student).filter(Student.student_code == data.student_code).first()
     if not student:
         raise HTTPException(status_code=404, detail="Estudiante no encontrado")
+
+    if student.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="No puedes marcar asistencia por otro estudiante")
 
     existing = db.query(Attendance).filter(
         Attendance.session_id == session.id,
@@ -71,14 +105,26 @@ def mark_attendance(data: AttendanceMarkByCode, db: Session = Depends(get_db)):
 
 
 @router.get("/sessions/{session_id}/records", response_model=List[AttendanceResponse])
-def get_session_records(session_id: int, db: Session = Depends(get_db)):
-    """Ver registros de asistencia de una sesión."""
+def get_session_records(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Ver registros de asistencia de una sesión. Solo docente/admin."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.DOCENTE]:
+        raise HTTPException(status_code=403, detail="Sin permisos")
     return db.query(Attendance).filter(Attendance.session_id == session_id).all()
 
 
 @router.patch("/sessions/{session_id}/close")
-def close_session(session_id: int, db: Session = Depends(get_db)):
-    """Cerrar sesión de asistencia."""
+def close_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Cerrar sesión de asistencia. Solo docente/admin."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.DOCENTE]:
+        raise HTTPException(status_code=403, detail="Sin permisos")
     session = db.query(AttendanceSession).filter(AttendanceSession.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Sesión no encontrada")
@@ -88,16 +134,15 @@ def close_session(session_id: int, db: Session = Depends(get_db)):
     return {"message": "Sesión cerrada correctamente"}
 
 
-# ── Electiva 5 - Vista simplificada ────────────────────────────────────────
+# ── Electiva 5 ─────────────────────────────────────────────────────────────
 
 class MarkStudentRequest(BaseModel):
     student_id: int
-    status: str  # "presente" | "ausente"
+    status: str
 
 
-def _get_or_create_electiva5_session(db: Session) -> tuple[Course, AttendanceSession]:
-    """Devuelve el curso Electiva 5 y la sesión abierta más reciente.
-    Si no hay sesión abierta, crea una nueva."""
+def _get_open_electiva5_session(db: Session) -> tuple[Course, AttendanceSession]:
+    """Devuelve el curso Electiva 5 y la sesión abierta más reciente. NO crea sesión automáticamente."""
     course = db.query(Course).filter(Course.code == "ELE5-2026").first()
     if not course:
         raise HTTPException(status_code=404, detail="Curso Electiva 5 no encontrado en la BD")
@@ -108,21 +153,46 @@ def _get_or_create_electiva5_session(db: Session) -> tuple[Course, AttendanceSes
         .order_by(AttendanceSession.created_at.desc())
         .first()
     )
-    if not session:
-        code = generate_session_code()
-        while db.query(AttendanceSession).filter(AttendanceSession.session_code == code).first():
-            code = generate_session_code()
-        session = AttendanceSession(
-            course_id=course.id,
-            topic="Electiva 5 - Asistencia",
-            date=datetime.utcnow(),
-            session_code=code,
-        )
-        db.add(session)
-        db.commit()
-        db.refresh(session)
-
     return course, session
+
+
+@router.post("/electiva5/session", response_model=AttendanceSessionResponse, status_code=201)
+def create_electiva5_session(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Docente/admin crea manualmente una sesión de Electiva 5."""
+    if current_user.role not in [UserRole.ADMIN, UserRole.DOCENTE]:
+        raise HTTPException(status_code=403, detail="Sin permisos")
+
+    course = db.query(Course).filter(Course.code == "ELE5-2026").first()
+    if not course:
+        raise HTTPException(status_code=404, detail="Curso Electiva 5 no encontrado")
+
+    # Cerrar sesiones abiertas anteriores
+    open_sessions = (
+        db.query(AttendanceSession)
+        .filter(AttendanceSession.course_id == course.id, AttendanceSession.is_open == True)
+        .all()
+    )
+    for s in open_sessions:
+        s.is_open = False
+        s.closed_at = datetime.utcnow()
+
+    code = generate_session_code()
+    while db.query(AttendanceSession).filter(AttendanceSession.session_code == code).first():
+        code = generate_session_code()
+
+    session = AttendanceSession(
+        course_id=course.id,
+        topic="Electiva 5 - Asistencia",
+        date=datetime.utcnow(),
+        session_code=code,
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
 
 
 @router.get("/electiva5")
@@ -130,11 +200,10 @@ def get_electiva5(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Vista simplificada de asistencia para Electiva 5.
-    Docente/admin ve lista de estudiantes con estado. Estudiante ve solo su estado."""
+    """Vista de asistencia Electiva 5 según rol."""
 
     if current_user.role in [UserRole.ADMIN, UserRole.DOCENTE]:
-        course, session = _get_or_create_electiva5_session(db)
+        course, session = _get_open_electiva5_session(db)
 
         students = (
             db.query(Student)
@@ -145,10 +214,12 @@ def get_electiva5(
         student_list = []
         for s in students:
             u = db.query(User).filter(User.id == s.user_id).first()
-            att = db.query(Attendance).filter(
-                Attendance.session_id == session.id,
-                Attendance.student_id == s.id,
-            ).first()
+            att = None
+            if session:
+                att = db.query(Attendance).filter(
+                    Attendance.session_id == session.id,
+                    Attendance.student_id == s.id,
+                ).first()
             student_list.append({
                 "student_id": s.id,
                 "user_id": s.user_id,
@@ -165,11 +236,11 @@ def get_electiva5(
                 "session_code": session.session_code,
                 "date": session.date.isoformat(),
                 "is_open": session.is_open,
-            },
+            } if session else None,
             "students": student_list,
         }
 
-    # Estudiante: ver su propio historial
+    # Estudiante
     student = db.query(Student).filter(Student.user_id == current_user.id).first()
     if not student:
         raise HTTPException(status_code=404, detail="No tienes perfil de estudiante registrado")
@@ -218,7 +289,7 @@ def mark_electiva5(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Docente/admin marca o actualiza asistencia de un estudiante en Electiva 5."""
+    """Docente/admin marca asistencia de un estudiante en Electiva 5."""
     if current_user.role not in [UserRole.ADMIN, UserRole.DOCENTE]:
         raise HTTPException(status_code=403, detail="Sin permisos para marcar asistencia")
 
@@ -227,7 +298,9 @@ def mark_electiva5(
     except ValueError:
         raise HTTPException(status_code=400, detail="Estado inválido. Use: presente, ausente")
 
-    _, session = _get_or_create_electiva5_session(db)
+    _, session = _get_open_electiva5_session(db)
+    if not session:
+        raise HTTPException(status_code=404, detail="No hay sesión abierta. Crea una sesión primero.")
 
     record = db.query(Attendance).filter(
         Attendance.session_id == session.id,
