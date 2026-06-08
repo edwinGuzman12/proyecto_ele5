@@ -10,6 +10,7 @@ interface Props {
   studentCode: string;
   userName?: string;
   fullName?: string;
+  onLogout?: () => void;
 }
 
 function PorcentajeCirculo({ porcentaje }: { porcentaje: number | undefined }) {
@@ -44,7 +45,7 @@ function FilaAsistencia({ item }: { item: AsistenciaItem }) {
   );
 }
 
-export default function AttendanceScreen({ studentCode, userName, fullName }: Props) {
+export default function AttendanceScreen({ studentCode, userName, fullName, onLogout }: Props) {
   const [sessionCode, setSessionCode] = useState('');
   const { registrarAsistencia, cargarHistorial, loading, loadingHistorial, error, success, historial } = useAttendance();
 
@@ -78,6 +79,9 @@ export default function AttendanceScreen({ studentCode, userName, fullName }: Pr
         <Text style={styles.nombre} numberOfLines={1}>{displayName}</Text>
         <Text style={styles.codigo}>Código: {studentCode}</Text>
         <Text style={styles.asignatura}>Electiva V — Unimayor</Text>
+        {onLogout && (
+          <Text onPress={onLogout} style={styles.logout}>Cerrar sesión →</Text>
+        )}
       </View>
 
       {loadingHistorial && !historial ? (
@@ -151,6 +155,7 @@ const styles = StyleSheet.create({
   nombre: { color: '#fff', fontSize: 22, fontWeight: 'bold', marginTop: 2 },
   codigo: { color: '#C8E6C9', fontSize: 13, marginTop: 4 },
   asignatura: { color: '#A5D6A7', fontSize: 13, marginTop: 2 },
+  logout: { color: '#A5D6A7', fontSize: 13, marginTop: 8, textDecorationLine: 'underline' },
   statsCard: { backgroundColor: '#fff', borderRadius: 18, padding: 20, marginBottom: 16, elevation: 3 },
   circulo: { alignItems: 'center', marginBottom: 16 },
   circPorcentaje: { fontSize: 48, fontWeight: 'bold' },
